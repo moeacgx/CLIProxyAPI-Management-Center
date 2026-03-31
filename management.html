@@ -183,6 +183,64 @@ ${n.comment}`:n.comment}this.doc.range[2]=n.offset;break}default:this.errors.pus
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      (function () {
+        function unifyVersionCard() {
+          var grid = document.querySelector('[class*="SystemPage-module__versionInfo"]');
+          if (!grid) return false;
+          var tiles = Array.prototype.filter.call(grid.children, function (n) {
+            return n && n.nodeType === 1;
+          });
+          if (tiles.length < 2) return false;
+
+          var panelTile = tiles[0];
+          var apiTile = tiles[1];
+          var valueSelector = '[class*="SystemPage-module__tileValue"]';
+          var labelSelector = '[class*="SystemPage-module__tileLabel"]';
+          var panelValueEl = panelTile.querySelector(valueSelector);
+          var apiValueEl = apiTile.querySelector(valueSelector);
+          if (!panelValueEl || !apiValueEl) return false;
+
+          var panelVersion = (panelValueEl.textContent || "").trim();
+          var apiVersion = (apiValueEl.textContent || "").trim();
+          var merged = apiVersion && apiVersion.toLowerCase() !== "dev" ? apiVersion : panelVersion;
+          if (merged) {
+            apiValueEl.textContent = merged;
+          }
+
+          var apiLabelEl = apiTile.querySelector(labelSelector);
+          if (apiLabelEl) {
+            var current = (apiLabelEl.textContent || "").trim();
+            var isZh = /[\u4e00-\u9fa5]/.test(current);
+            apiLabelEl.textContent = isZh ? "版本" : "Version";
+          }
+
+          if (panelTile.style.display !== "none") {
+            panelTile.style.display = "none";
+          }
+          return true;
+        }
+
+        function startObserver() {
+          var observer = new MutationObserver(function () {
+            unifyVersionCard();
+          });
+          try {
+            observer.observe(document.body, { childList: true, subtree: true });
+          } catch (e) {}
+          unifyVersionCard();
+          setTimeout(function () {
+            observer.disconnect();
+          }, 10000);
+        }
+
+        if (document.readyState === "loading") {
+          document.addEventListener("DOMContentLoaded", startObserver);
+        } else {
+          startObserver();
+        }
+      })();
+    </script>
   <script defer src="https://static.cloudflareinsights.com/beacon.min.js/v8c78df7c7c0f484497ecbca7046644da1771523124516" integrity="sha512-8DS7rgIrAmghBFwoOTujcf6D9rXvH8xm8JQ1Ja01h9QX8EzXldiszufYa4IFfKdLUKTTrnSFXLDkUEOTrZQ8Qg==" data-cf-beacon='{"version":"2024.11.0","token":"886d8a2f46bc4c2e95a1b306b825a0aa","r":1,"server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
 </body>
 </html>
