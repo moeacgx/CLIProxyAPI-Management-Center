@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="zh-CN" translate="no" class="notranslate">
   <head>
     <meta charset="UTF-8" />
@@ -210,9 +210,7 @@ ${n.comment}`:n.comment}this.doc.range[2]=n.offset;break}default:this.errors.pus
 
           var apiLabelEl = apiTile.querySelector(labelSelector);
           if (apiLabelEl) {
-            var current = (apiLabelEl.textContent || "").trim();
-            var isZh = /[\u4e00-\u9fa5]/.test(current);
-            apiLabelEl.textContent = isZh ? "版本" : "Version";
+            apiLabelEl.textContent = "Cpamanager版本";
           }
 
           if (panelTile.style.display !== "none") {
@@ -359,7 +357,255 @@ ${n.comment}`:n.comment}this.doc.range[2]=n.offset;break}default:this.errors.pus
           start();
         }
       })();
-    </script>  <script defer src="https://static.cloudflareinsights.com/beacon.min.js/v8c78df7c7c0f484497ecbca7046644da1771523124516" integrity="sha512-8DS7rgIrAmghBFwoOTujcf6D9rXvH8xm8JQ1Ja01h9QX8EzXldiszufYa4IFfKdLUKTTrnSFXLDkUEOTrZQ8Qg==" data-cf-beacon='{"version":"2024.11.0","token":"886d8a2f46bc4c2e95a1b306b825a0aa","r":1,"server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
+    </script>  <script>
+  (function () {
+    /* cpa-update-center */
+    var state = {
+      status: null,
+      lastFetch: 0,
+      fetching: null,
+      checkBtn: null,
+      confirmBtn: null,
+      statusEl: null
+    };
+
+    function textOf(el) {
+      return (el && el.textContent ? el.textContent : "").trim();
+    }
+
+    function toArray(list) {
+      return Array.prototype.slice.call(list || []);
+    }
+
+    function findVersionTile() {
+      var grid = document.querySelector('[class*="SystemPage-module__versionInfo"]');
+      if (!grid) return null;
+      var tiles = toArray(grid.children).filter(function (n) {
+        return n && n.nodeType === 1;
+      });
+      if (!tiles.length) return null;
+      for (var i = 0; i < tiles.length; i++) {
+        var label = tiles[i].querySelector('[class*="tileLabel"]');
+        var text = textOf(label);
+        if (text && text.indexOf("版本") !== -1) {
+          return tiles[i];
+        }
+      }
+      return tiles[tiles.length - 1];
+    }
+
+    function findClass(selector) {
+      var el = document.querySelector(selector);
+      return el ? el.className : "";
+    }
+
+    function ensureAction(tile) {
+      if (!tile) return null;
+      var header = tile.querySelector('[class*="tileHeader"]');
+      if (!header) return null;
+      var action = header.querySelector('[class*="tileAction"]');
+      if (action) return action;
+      action = document.createElement("div");
+      var cls = findClass('[class*="tileAction"]');
+      if (cls) action.className = cls;
+      header.appendChild(action);
+      return action;
+    }
+
+    function ensureStatus(tile) {
+      if (!tile) return null;
+      var el = tile.querySelector('[data-update-status="1"]');
+      if (el) return el;
+      var sub = tile.querySelector('[class*="tileSub"]');
+      if (!sub) {
+        sub = document.createElement("div");
+        var cls = findClass('[class*="tileSub"]');
+        if (cls) sub.className = cls;
+        tile.appendChild(sub);
+      }
+      sub.setAttribute("data-update-status", "1");
+      return sub;
+    }
+
+    function findButtonByText(texts) {
+      var buttons = toArray(document.querySelectorAll("button"));
+      for (var i = 0; i < buttons.length; i++) {
+        var t = textOf(buttons[i]);
+        for (var j = 0; j < texts.length; j++) {
+          if (t === texts[j] || (t && t.indexOf(texts[j]) !== -1)) {
+            return buttons[i];
+          }
+        }
+      }
+      return null;
+    }
+
+    function getButtonClass() {
+      var btn = document.querySelector('[class*="versionCheck"] button') || document.querySelector("button");
+      return btn ? btn.className : "";
+    }
+
+    function ensureButton(role, label, action) {
+      if (!action) return null;
+      var existing = action.querySelector('[data-update-role="' + role + '"]');
+      if (existing) return existing;
+      var texts = role === "check" ? ["检查更新", "检查"] : ["一键更新", "立即更新", "更新"];
+      var fromDoc = findButtonByText(texts);
+      if (fromDoc) {
+        fromDoc.setAttribute("data-update-role", role);
+        action.appendChild(fromDoc);
+        return fromDoc;
+      }
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = label;
+      var cls = getButtonClass();
+      if (cls) btn.className = cls;
+      btn.setAttribute("data-update-role", role);
+      action.appendChild(btn);
+      return btn;
+    }
+
+    function bindButton(btn, handler) {
+      if (!btn || btn.getAttribute("data-update-bound") === "1") return;
+      btn.setAttribute("data-update-bound", "1");
+      btn.addEventListener("click", function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        handler();
+      });
+    }
+
+    function hideOldArea() {
+      var area = document.querySelector('[class*="SystemPage-module__versionCheck"]');
+      if (area) area.style.display = "none";
+    }
+
+    function formatTime(value) {
+      if (!value) return "";
+      var d = new Date(value);
+      if (isNaN(d.getTime())) return value;
+      return d.toLocaleString();
+    }
+
+    function formatStatus(s) {
+      if (!s) return "未获取更新状态";
+      if (!s.enabled) return "自动更新未启用";
+      if (s.in_progress) return "更新处理中...";
+      if (s.last_error) return "更新失败: " + s.last_error;
+      if (s.pending_restart) return "已更新，等待重启";
+      if (s.update_available) return "发现新版本: " + (s.latest_version || "");
+      if (s.latest_version) return "已是最新: " + s.latest_version;
+      return "未检查更新";
+    }
+
+    function applyStatus(s) {
+      state.status = s || null;
+      var tile = findVersionTile();
+      if (!tile) return;
+      var statusEl = ensureStatus(tile);
+      var text = formatStatus(s);
+      if (s && s.last_check_at) {
+        text += " · 上次检查: " + formatTime(s.last_check_at);
+      }
+      statusEl.textContent = text;
+
+      if (state.checkBtn) {
+        state.checkBtn.disabled = !!(s && s.in_progress);
+      }
+      if (state.confirmBtn) {
+        var disabled = !s || !s.update_available || s.in_progress || s.pending_restart || !s.enabled;
+        state.confirmBtn.disabled = disabled;
+        state.confirmBtn.textContent = s && s.pending_restart ? "等待重启" : "一键更新";
+      }
+    }
+
+    function handleResponse(res) {
+      if (!res) {
+        applyStatus(state.status);
+        return null;
+      }
+      return res
+        .json()
+        .catch(function () {
+          return null;
+        })
+        .then(function (data) {
+          if (data && data.error && !data.last_error) {
+            data.last_error = data.error;
+          }
+          applyStatus(data || state.status);
+          return data;
+        });
+    }
+
+    function fetchStatus(force) {
+      var now = Date.now();
+      if (!force && state.status && now - state.lastFetch < 3000) {
+        return Promise.resolve(state.status);
+      }
+      if (state.fetching) return state.fetching;
+      state.lastFetch = now;
+      state.fetching = fetch("/v0/management/update/status", { credentials: "same-origin" })
+        .then(handleResponse)
+        .catch(function () {
+          applyStatus(state.status);
+        })
+        .finally(function () {
+          state.fetching = null;
+        });
+      return state.fetching;
+    }
+
+    function postAction(url) {
+      return fetch(url, { method: "POST", credentials: "same-origin" })
+        .then(handleResponse)
+        .catch(function () {
+          applyStatus(state.status);
+        });
+    }
+
+    function setup() {
+      var tile = findVersionTile();
+      if (!tile) return;
+      var action = ensureAction(tile);
+      if (!action) return;
+
+      state.checkBtn = ensureButton("check", "检查更新", action);
+      state.confirmBtn = ensureButton("confirm", "一键更新", action);
+
+      bindButton(state.checkBtn, function () {
+        postAction("/v0/management/update/check");
+      });
+      bindButton(state.confirmBtn, function () {
+        postAction("/v0/management/update/confirm");
+      });
+
+      hideOldArea();
+      ensureStatus(tile);
+      fetchStatus(false);
+    }
+
+    function start() {
+      setup();
+      try {
+        var observer = new MutationObserver(function () {
+          setup();
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+      } catch (e) {}
+      fetchStatus(false);
+    }
+
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", start);
+    } else {
+      start();
+    }
+  })();
+</script>
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js/v8c78df7c7c0f484497ecbca7046644da1771523124516" integrity="sha512-8DS7rgIrAmghBFwoOTujcf6D9rXvH8xm8JQ1Ja01h9QX8EzXldiszufYa4IFfKdLUKTTrnSFXLDkUEOTrZQ8Qg==" data-cf-beacon='{"version":"2024.11.0","token":"886d8a2f46bc4c2e95a1b306b825a0aa","r":1,"server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
 </body>
 </html>
+
 
