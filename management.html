@@ -238,6 +238,128 @@ ${n.comment}`:n.comment}this.doc.range[2]=n.offset;break}default:this.errors.pus
         }
       })();
     </script>
-  <script defer src="https://static.cloudflareinsights.com/beacon.min.js/v8c78df7c7c0f484497ecbca7046644da1771523124516" integrity="sha512-8DS7rgIrAmghBFwoOTujcf6D9rXvH8xm8JQ1Ja01h9QX8EzXldiszufYa4IFfKdLUKTTrnSFXLDkUEOTrZQ8Qg==" data-cf-beacon='{"version":"2024.11.0","token":"886d8a2f46bc4c2e95a1b306b825a0aa","r":1,"server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
+      <script>
+      (function () {
+        var uaCache = Object.create(null);
+        var lastFetch = 0;
+        var fetching = null;
+
+        function normalize(text) {
+          return (text || "").trim();
+        }
+
+        function pickUA(file) {
+          if (!file) return "";
+          var ua = file.user_agent || file.userAgent || file.ua;
+          if (typeof ua === "string") {
+            ua = ua.trim();
+            if (ua) return ua;
+          }
+          return "";
+        }
+
+        function mapFiles(files) {
+          uaCache = Object.create(null);
+          if (!Array.isArray(files)) return;
+          for (var i = 0; i < files.length; i++) {
+            var f = files[i];
+            if (!f) continue;
+            var name = normalize(f.name || f.id || "");
+            var ua = pickUA(f);
+            if (name && ua) {
+              uaCache[name] = ua;
+            }
+          }
+        }
+
+        function fetchUA(force) {
+          var now = Date.now();
+          if (!force && now - lastFetch < 5000 && Object.keys(uaCache).length > 0) {
+            return Promise.resolve();
+          }
+          if (fetching) return fetching;
+          lastFetch = now;
+          fetching = fetch("/v0/management/auth-files?is_webui=1", { credentials: "same-origin" })
+            .then(function (res) {
+              return res && res.ok ? res.json() : null;
+            })
+            .then(function (data) {
+              if (data && Array.isArray(data.files)) mapFiles(data.files);
+            })
+            .catch(function () {})
+            .finally(function () {
+              fetching = null;
+            });
+          return fetching;
+        }
+
+        function getClassName(el, selector) {
+          var node = el.querySelector(selector);
+          return node ? node.className : "";
+        }
+
+        function injectUA(card) {
+          if (!card || card.querySelector('[data-ua-injected="1"]')) return;
+          var nameEl = card.querySelector('[class*="fileName"]');
+          if (!nameEl) return;
+          var name = normalize(nameEl.textContent);
+          if (!name) return;
+          var ua = uaCache[name];
+          if (!ua) return;
+
+          var meta = card.querySelector('[class*="cardMeta"]');
+          if (!meta) return;
+
+          var itemClass = getClassName(meta, '[class*="metaItem"]');
+          var labelClass = getClassName(meta, '[class*="metaLabel"]');
+          var valueClass = getClassName(meta, '[class*="metaValue"]');
+
+          var item = document.createElement("div");
+          item.setAttribute("data-ua-injected", "1");
+          if (itemClass) item.className = itemClass;
+
+          var label = document.createElement("span");
+          if (labelClass) label.className = labelClass;
+          label.textContent = "UA";
+
+          var value = document.createElement("span");
+          if (valueClass) value.className = valueClass;
+          value.textContent = ua;
+          value.title = ua;
+
+          item.appendChild(label);
+          item.appendChild(value);
+          meta.appendChild(item);
+        }
+
+        function applyAll() {
+          var cards = document.querySelectorAll('[class*="fileCard"]');
+          for (var i = 0; i < cards.length; i++) {
+            injectUA(cards[i]);
+          }
+        }
+
+        function refresh() {
+          fetchUA(false).then(applyAll);
+        }
+
+        function start() {
+          try {
+            var observer = new MutationObserver(function () {
+              refresh();
+            });
+            observer.observe(document.body, { childList: true, subtree: true });
+          } catch (e) {}
+          refresh();
+        }
+
+        if (document.readyState === "loading") {
+          document.addEventListener("DOMContentLoaded", start);
+        } else {
+          start();
+        }
+      })();
+    </script>  <script defer src="https://static.cloudflareinsights.com/beacon.min.js/v8c78df7c7c0f484497ecbca7046644da1771523124516" integrity="sha512-8DS7rgIrAmghBFwoOTujcf6D9rXvH8xm8JQ1Ja01h9QX8EzXldiszufYa4IFfKdLUKTTrnSFXLDkUEOTrZQ8Qg==" data-cf-beacon='{"version":"2024.11.0","token":"886d8a2f46bc4c2e95a1b306b825a0aa","r":1,"server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
 </body>
 </html>
+
