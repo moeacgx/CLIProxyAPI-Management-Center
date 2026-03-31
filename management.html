@@ -229,9 +229,6 @@ ${n.comment}`:n.comment}this.doc.range[2]=n.offset;break}default:this.errors.pus
             observer.observe(document.body, { childList: true, subtree: true });
           } catch (e) {}
           unifyVersionCard();
-          setTimeout(function () {
-            observer.disconnect();
-          }, 10000);
         }
 
         if (document.readyState === "loading") {
