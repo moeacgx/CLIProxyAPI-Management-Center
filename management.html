@@ -377,19 +377,53 @@ ${n.comment}`:n.comment}this.doc.range[2]=n.offset;break}default:this.errors.pus
       return Array.prototype.slice.call(list || []);
     }
 
-    function findVersionTile() {
-      var grid = document.querySelector('[class*="SystemPage-module__versionInfo"]');
-      if (!grid) return null;
-      var tiles = toArray(grid.children).filter(function (n) {
+    function findVersionGrid() {
+      return document.querySelector('[class*="SystemPage-module__versionInfo"]');
+    }
+
+    function findVersionTiles() {
+      var grid = findVersionGrid();
+      if (!grid) return [];
+      return toArray(grid.children).filter(function (n) {
         return n && n.nodeType === 1;
       });
+    }
+
+    function isVersionTile(tile) {
+      var label = tile ? tile.querySelector('[class*="tileLabel"]') : null;
+      var text = textOf(label).toLowerCase();
+      if (!text) return false;
+      return text.indexOf("版本") !== -1 || text.indexOf("version") !== -1;
+    }
+
+    function classifyVersionTile(tile) {
+      var label = tile ? tile.querySelector('[class*="tileLabel"]') : null;
+      var text = textOf(label).toLowerCase();
+      if (!text) return "";
+      if (text.indexOf("api") !== -1 || text.indexOf("cli") !== -1 || text.indexOf("proxy") !== -1) {
+        return "server";
+      }
+      if (text.indexOf("管理") !== -1 || text.indexOf("中心") !== -1 || text.indexOf("panel") !== -1 || text.indexOf("center") !== -1 || text.indexOf("web") !== -1 || text.indexOf("ui") !== -1) {
+        return "panel";
+      }
+      return "";
+    }
+
+    function findVersionTile() {
+      var tiles = findVersionTiles();
       if (!tiles.length) return null;
+      var serverTile = null;
+      var panelTile = null;
       for (var i = 0; i < tiles.length; i++) {
-        var label = tiles[i].querySelector('[class*="tileLabel"]');
-        var text = textOf(label);
-        if (text && text.indexOf("版本") !== -1) {
-          return tiles[i];
-        }
+        if (!isVersionTile(tiles[i])) continue;
+        var kind = classifyVersionTile(tiles[i]);
+        if (kind === "server" && !serverTile) serverTile = tiles[i];
+        if (kind === "panel" && !panelTile) panelTile = tiles[i];
+      }
+      if (serverTile) return serverTile;
+      if (panelTile) return panelTile;
+      for (var j = 0; j < tiles.length; j++) {
+        if (isVersionTile(tiles[j])) return tiles[j];
       }
       return tiles[tiles.length - 1];
     }
@@ -481,6 +515,54 @@ ${n.comment}`:n.comment}this.doc.range[2]=n.offset;break}default:this.errors.pus
       if (area) area.style.display = "none";
     }
 
+    function getTileValue(tile) {
+      if (!tile) return "";
+      var val = tile.querySelector('[class*="tileValue"]');
+      return textOf(val);
+    }
+
+    function setTileLabel(tile, label) {
+      if (!tile) return;
+      var el = tile.querySelector('[class*="tileLabel"]');
+      if (el && label) el.textContent = label;
+    }
+
+    function setTileValue(tile, value) {
+      if (!tile) return;
+      var el = tile.querySelector('[class*="tileValue"]');
+      if (el && value) el.textContent = value;
+    }
+
+    function mergeVersionTiles(primary) {
+      var tiles = findVersionTiles();
+      if (!primary || !tiles.length) return;
+      var panelTile = null;
+      var serverTile = null;
+      for (var i = 0; i < tiles.length; i++) {
+        if (!isVersionTile(tiles[i])) continue;
+        var kind = classifyVersionTile(tiles[i]);
+        if (kind === "panel" && !panelTile) panelTile = tiles[i];
+        if (kind === "server" && !serverTile) serverTile = tiles[i];
+      }
+      var panelVersion = getTileValue(panelTile);
+      var serverVersion = getTileValue(serverTile);
+      var chosen = "";
+      if (serverVersion && serverVersion.toLowerCase() !== "dev") {
+        chosen = serverVersion;
+      } else if (panelVersion) {
+        chosen = panelVersion;
+      } else {
+        chosen = serverVersion || getTileValue(primary);
+      }
+      setTileLabel(primary, "Cpamanager 版本");
+      if (chosen) setTileValue(primary, chosen);
+      for (var j = 0; j < tiles.length; j++) {
+        if (tiles[j] !== primary && isVersionTile(tiles[j])) {
+          tiles[j].style.display = "none";
+        }
+      }
+    }
+
     function formatTime(value) {
       if (!value) return "";
       var d = new Date(value);
@@ -568,6 +650,7 @@ ${n.comment}`:n.comment}this.doc.range[2]=n.offset;break}default:this.errors.pus
     function setup() {
       var tile = findVersionTile();
       if (!tile) return;
+      mergeVersionTiles(tile);
       var action = ensureAction(tile);
       if (!action) return;
 
